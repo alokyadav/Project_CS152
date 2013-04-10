@@ -1,0 +1,91 @@
+;correct-dir-k turn-arbit face-the-path correct-dir-t
+(define (enemy-movement)
+  (define enemies (get-field list-of-enemies current-stats))
+  (define (helper l)
+    (if(null? l)(set! l '())
+       (let* ([enemy (car l)]
+              [dir (get-field dir enemy)]
+              [x (car (get-field pos enemy))]
+              [y (cdr (get-field pos enemy))]
+              [waytoking (get-field way-to-king enemy)]
+              [waytotank (get-field way-to-tank enemy)])
+         (if(equal? (get-field priority enemy) 'k)
+            (if(null? waytoking)
+               (if (equal? (get-field dir enemy) (correct-dir-k))
+                   (if (< (random) .8)
+                       (if (equal? dir 'up)(send enemy add-bullet (list (cons (+ x 10) (- y 5)) dir))
+                           (if(equal? dir 'down)(send enemy add-bullet (list (cons (+ x 10) (+ y 35)) dir))
+                              (if(equal? dir 'right)(send enemy add-bullet (list (cons (+ x 35) (+ y 10)) dir))
+                                 (if(equal? dir 'left)(send enemy add-bullet (list (cons (- x 5) (+ y 10)) dir))
+                                    (error "undefined dir")))))
+                       (begin
+                         (set-field! dir enemy (turn-arbit))
+                         (shoot dir enemy x y)
+                         (set-field! dir enemy (turn-arbit))))
+                   (set-field! dir enemy (correct-dir-k)))
+               (let ([waytoking (cdr (get-field way-to-king enemy))])
+                 (if (equal? dir (face-the-path waytoking))
+                     (if(< (random) .8)(set-field! pos enemy (car (waytoking)))
+                        (begin
+                          (shoot dir enemy x y)
+                          (set-field! dir enemy (turn-arbit))))
+                     (set-field! dir enemy (face-the-path waytoking)))))
+            (if(null? waytotank)
+               (if (equal? (get-field dir enemy) (correct-dir-t enemy))
+                   (if (< (random) .8)
+                       (if (equal? dir 'up)(send enemy add-bullet (list (cons (+ x 10) (- y 5)) dir))
+                           (if(equal? dir 'down)(send enemy add-bullet (list (cons (+ x 10) (+ y 35)) dir))
+                              (if(equal? dir 'right)(send enemy add-bullet (list (cons (+ x 35) (+ y 10)) dir))
+                                 (if(equal? dir 'left)(send enemy add-bullet (list (cons (- x 5) (+ y 10)) dir))
+                                    (error "undefined dir")))))
+                       (begin
+                         (shoot dir enemy x y)
+                         (set-field! dir enemy (turn-arbit))))
+                   (set-field! dir enemy (correct-dir-t enemy)))
+               (let ([waytotank (cdr (get-field way-to-tank enemy))])
+                 (if (equal? dir (face-the-path waytotank))
+                     (if(< (random) .8)(set-field! pos enemy (car (waytotank)))
+                        (begin
+                          (set-field! dir enemy (turn-arbit))
+                          (shoot dir enemy x y)
+                          (set-field! dir enemy (turn-arbit))))
+                     (set-field! dir enemy (face-the-path waytotank)))))))))
+  (helper enemies))
+
+(define (correct-dir-k)
+  (let([x-of-k 300]
+       [y-of-k 600]
+       [x-of-t (car (get-field pos our-tank))]
+       [y-of-t (cdr (get-field pos our-tank))])
+    (if(and (= x-of-t x-of-k) (> y-of-k y-of-t))'down
+       (if(and (= y-of-t y-of-k) (< x-of-t x-of-k))'right
+          (if(and (= y-of-t y-of-k) (< x-of-k x-of-t))'left
+             (set! x-of-k 300))))))
+
+(define (correct-dir-t enemy)
+  (let([x-of-e (car (get-field pos enemy))]
+       [y-of-e (cdr (get-field pos enemy))]
+       [x-of-t (car (get-field pos our-tank))]
+       [y-of-t (cdr (get-field pos our-tank))])
+    (if(and (= y-of-t y-of-e) (< x-of-e y-of-t))'right
+       (if(and (= y-of-e y-of-t) (< x-of-t y-of-e))'left
+          (if(and (= x-of-e x-of-t) (> y-of-e y-of-t))'up
+             (if(and (= x-of-e x-of-t) (> y-of-t y-of-e))'down))))))
+
+(define (face-the-path path)
+  (let([x-of-e (car (get-field pos enemy))]
+       [y-of-e (cdr (get-field pos enemy))]
+       [x-of-first (car (car path))]
+       [y-of-first (cadr (car path))])
+    (if(and (= x-of-e x-of-first) (< y-of-e y-of-first))'down
+       (if(and (= x-of-e x-of-first) (< y-of-first y-of-e))'up
+          (if (and (= y-of-e y-of-first) (< x-of-first x-of-e))'left
+              (if(and (= y-of-e y-of-first) (< x-of-e x-of-first))'right))))))
+
+(define (shoot dir enemy x y)
+  (if (equal? dir 'up)(send enemy add-bullet (list (cons (+ x 10) (- y 5)) dir))
+                           (if(equal? dir 'down)(send enemy add-bullet (list (cons (+ x 10) (+ y 35)) dir))
+                              (if(equal? dir 'right)(send enemy add-bullet (list (cons (+ x 35) (+ y 10)) dir))
+                                 (if(equal? dir 'left)(send enemy add-bullet (list (cons (- x 5) (+ y 10)) dir))
+                                    (error "undefined dir"))))))
+

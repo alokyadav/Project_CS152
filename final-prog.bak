@@ -1,0 +1,816 @@
+;check-timer update-graphics produce-enemy
+;change-prior-for-each update-points-for-each
+
+(include "mat-gen.rkt")
+
+(define our-tank%
+  (class object%
+    (init pow)
+    (init l)
+    (init-field [power pow])
+    (init-field [lives l])
+    
+    (init-field [pos (cons 80 210)])
+    (init-field [dir 'up])
+    (super-new)
+    
+    (define/public (set-pos pair) (set! pos (cons (+ (car pair) (car pos)) (+ (cdr pair) (cdr pos)))))
+    (define/public (set-dir dr) (set! dir dr))
+    (define/public (killed) (set! lives (- lives 1)))))
+
+;way2rtank and way2king will be a list of coordinates from enemy tank to our tank and the king
+;priority will be a two valued variable with value either = 'k or 't representing the present aim of the tank (i.e. whether it wants to kill the king or our tank)
+;the probability of the value of priority would be directly proportional to the length of the two paths
+;The priority will be reset every few seconds and the new value would be an equally likely choice between king and our tank
+;shortest will be a method to change the way2rtank after every move of our tank.
+
+(define enemy-tank%
+  (class object%
+    
+    (init posn)
+    (init dirn)
+    (init pow)
+    (init-field [pos posn])
+    (init-field [dir dirn])
+    (init-field [power pow])
+    (init-field [level 1])
+    (init-field [way2rtank '()])
+    (init-field [way2king '()])
+    (init-field [priority 'k])
+    (init-field [points (list '() '() '() '())])
+    
+    (super-new)
+    
+    (define/public (change-priority) (let ([c (/ (length way2rtank) (+ (length way2rtank) (length way2king)))]) (if (< (random) c)(set! priority 'k)
+                                                                                                                    (set! priority 't))))
+    
+    (define/public (update-points)
+            
+      (define p (make-posn (car pos) (cdr pos)))
+      
+      (define (get-left pos dir)
+    (define (helper l p dir)
+      (if(equal? 'left dir)(if (equal? 0 ((get-pixel window ) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (+ (posn-y p) 5)) dir)
+                               l)
+         (if(equal? 'down dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (+ (posn-x p) 5) (posn-y p)) dir)
+                                 l)
+            (if(equal? 'right dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (- (posn-y p) 5)) dir)
+                                     l)
+               (if(equal? 'up dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (- (posn-x p) 5) (posn-y p)) dir)
+                                     l)
+                  (error "undefined direction"))))))
+    (helper '() (make-posn (posn-x p) (posn-y p)) dir))
+      
+      (define (get-down pos dir)
+        (define (helper l p dir)
+          (if(equal? 'left dir)(if (equal? 0 ((get-pixel window ) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (+ 5 (posn-x p)) (posn-y p)) dir)
+                                   l)
+             (if(equal? 'down dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (- (posn-y p) 5)) dir)
+                                     l)
+                (if(equal? 'right dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (- (posn-x p) 5) (posn-y p)) dir)
+                                         l)
+                   (if(equal? 'up dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (+ (posn-y p) 5)) dir)
+                                         l)
+                      (error "undefined direction"))))))
+        (helper '() (make-posn (posn-x p) (posn-y p)) dir))
+      
+      (define (get-right pos dir)
+        (define (helper l p dir)
+          (if(equal? 'left dir)(if (equal? 0 ((get-pixel window ) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (- (posn-y p) 5)) dir)
+                                   l)
+             (if(equal? 'down dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (- (posn-x p) 5) (posn-y p)) dir)
+                                     l)
+                (if(equal? 'right dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (+ (posn-y p) 5)) dir)
+                                         l)
+                   (if(equal? 'up dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (+ (posn-x p) 5) (posn-y p)) dir)
+                                         l)
+                      (error "undefined direction"))))))
+        (helper '() (make-posn (posn-x p) (posn-y p)) dir))
+      
+      (define (get-front pos dir)
+        (define (helper l p dir)
+          (if(equal? 'left dir)(if (equal? 0 ((get-pixel window ) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (- (posn-x p) 5) (posn-y p)) dir)
+                                   l)
+             (if(equal? 'down dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (+ (posn-y p) 5)) dir)
+                                     l)
+                (if(equal? 'right dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (+ (posn-x p) 5) (posn-y p)) dir)
+                                         l)
+                   (if(equal? 'up dir)(if(equal? 0 ((get-pixel window) p))(helper (cons (cons (posn-x p) (posn-y p)) l) (make-posn (posn-x p) (- (posn-y p) 5)) dir)
+                                         l)
+                      (error "undefined direction"))))))
+        (helper '() (make-posn (posn-x p) (posn-y p)) dir))
+      
+      (define (helper l)
+        (if(null? l)(set! l '())
+           (let([posn (get-field pos (car l))]
+                [object (car l)]
+                [dir (get-field dir (car l))])
+             (begin
+               (set-field! points object (list (get-left posn dir) (get-down posn dir) (get-right posn dir) (get-front posn dir)))
+               (helper (cdr l))))))
+      (helper (get-field list-of-enemies current-stats)))
+    
+    (define/public (shortest-path)
+      (define (path ini fnl)
+        (define (face-2-face pos dir)
+          (cond [(equal? dir 'up) (if (null? (filter (lambda (x) (equal? pos x)) (cadddr points))) #f #t)]
+                [(equal? dir 'down) (if (null? (filter (lambda (x) (equal? pos x)) (cadr points))) #f #t)]
+                [(equal? dir 'left) (if (null? (filter (lambda (x) (equal? pos x)) (cadr points))) #f #t)]
+                [(equal? dir 'right) (if (null? (filter (lambda (x) (equal? pos x)) (caddr points))) #f #t)]))
+        
+        (define (find-fnl fnl points)
+          (if (null? (filter (lambda (x) (and (= (car x) (car fnl)) (= (cadr x) (cdr fnl)))) points)) #f #t)) 
+        (define (dedupe e)
+          (if (null? e) '()
+              (cons (car e) (dedupe (filter (lambda (x) (not (equal? x (car e)))) 
+                                            (cdr e))))))
+        (define (main fnl points counter)
+          (define (helper giv-point)
+            (define (mylist) (filter (lambda (x) (not (equal? x #f))) 
+                                     (list (if (and 
+                                                (equal? (check 'down 0) #t) 
+                                                (equal? (face-2-face (cons (car giv-point) (+ (cdr giv-point) 5)) dir) #t))
+                                               (list (car giv-point) (+ (cdr giv-point) 5) (+ counter 1)) #f)
+                                           (if (and 
+                                                (equal? (check 'up 0) #t) 
+                                                (equal? (face-2-face (cons (car giv-point) (- (cdr giv-point) 5)) dir) #t))
+                                               (list (car giv-point) (- (cdr giv-point) 5) (+ counter 1)) #f)
+                                           (if (and 
+                                                (equal? (check 'right 0) #t)
+                                                (equal? (face-2-face (cons (+ (car giv-point) 5) (cdr giv-point)) dir) #t))
+                                               (list (+ (car giv-point) 5) (cdr giv-point) (+ counter 1)) #f)
+                                           (if (and 
+                                                (equal? (check 'left 0) #t)
+                                                (equal? (face-2-face (cons (- (car giv-point) 5) (cdr giv-point)) dir) #t))
+                                               (list (- (car giv-point) 5) (cdr giv-point) (+ counter 1)) #f))))
+            
+            (define (remove mylist) ;(begin (display mylist)
+              (if (null? (cdr mylist)) (if (null? (filter (lambda (x) (and (= (car x) (caar mylist)) 
+                                                                           (= (cadr x) (cadar mylist))
+                                                                           (>= (+ counter 1) (caddr x)))) points))
+                                           (list (car mylist)) '())
+                  (if (null? (filter (lambda (x) (and (= (car x) (caar mylist))
+                                                      (= (cadr x) (cadar mylist))
+                                                      (>= (+ counter 1) (caddr x)))) points))
+                      (append (list (car mylist)) (remove (cdr mylist))) (remove (cdr mylist)))))
+            
+            (define (check dir i)
+              (if (or (and (>= (car giv-point) 855) (equal? dir 'right))
+                      (and (<= (car giv-point) 0) (equal? dir 'left))
+                      (and (>= (cdr giv-point) 570) (equal? dir 'down))
+                      (and (<= (cdr giv-point) 0) (equal? dir 'up))) #f
+                                                                     (cond [(equal? dir 'up) 
+                                                                            (if (= i 5) #t (if (and
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ (car giv-point) 1) (- (cdr giv-point) i)))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ (car giv-point) 15) (- (cdr giv-point) i)))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ (car giv-point) 28) (- (cdr giv-point) i)))) 1))
+                                                                                               (check dir (+ i 1)) #f))]
+                                                                           [(equal? dir 'down) 
+                                                                            (if (= i 5) #t (if (and
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ (car giv-point) 1) (+ i 30 (cdr giv-point))))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ (car giv-point) 15) (+ i 30 (cdr giv-point))))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ (car giv-point) 28) (+ i 30 (cdr giv-point))))) 1))
+                                                                                               (check dir (+ i 1)) #f))]
+                                                                           [(equal? dir 'left) 
+                                                                            (if (= i 5) #t (if (and
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (- (car giv-point) i) (+ (cdr giv-point) 1)))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (- (car giv-point) i) (+ (cdr giv-point) 15)))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (- (car giv-point) i) (+ (cdr giv-point) 28)))) 1))
+                                                                                               (check dir (+ i 1)) #f))]
+                                                                           [(equal? dir 'right) 
+                                                                            (if (= i 5) #t (if (and 
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ i 30 (car giv-point)) (+ (cdr giv-point) 1)))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ i 30 (car giv-point)) (+ (cdr giv-point) 15)))) 1)
+                                                                                                (= (rgb-green ((get-color-pixel fake) (make-posn (+ i 30 (car giv-point)) (+ (cdr giv-point) 28)))) 1))
+                                                                                               (check dir (+ i 1)) #f))])))
+            
+            (define (new-points) (append points (remove (mylist))))
+            (filter (lambda (x) (not (equal? x #f))) (remove (mylist))))
+          
+          
+          (define (apply)
+            ;(display (apply-h (find-in-list = points)))
+            ;(newline)
+            (apply-h (find-in-list = points counter))) 
+          
+          (define (apply-h giv-list)      
+            (if (null? (cdr giv-list)) (helper (cons (caar giv-list) (cadar giv-list)))
+                (append (helper (cons (caar giv-list) (cadar giv-list))) (apply-h (cdr giv-list)))))
+          
+          (cond [(equal? (find-fnl fnl points) #t) points]
+                [else (main fnl (dedupe (append points (apply))) (+ counter 1))]))
+        (main fnl (list ini) 0))
+      (define (find-in-list pred take-list counter)
+        (filter (lambda (x) (pred (caddr x) counter)) take-list))
+      
+      
+      (let* ((mypath (path (list (car pos) (cdr pos) 0) (get-field pos our-tank)))
+             (revpath (reverse mypath))
+             (maxcounter (caddar revpath)))
+        (define (helper i point) 
+          (if (= i 0) (list initial)
+              (append (list (car (filter (lambda (x) (or (= (abs (- (car x) (car point))) 5)
+                                                         (= (abs (- (cdr x) (cdr point))) 5))) (find-in-list = mypath i))))
+                      (helper (- i 1) (car (filter (lambda (x) (or (= (abs (- (car x) (car point))) 5)
+                                                                   (= (abs (- (cdr x) (cdr point))) 5))) (find-in-list = mypath i)))))))
+        (helper maxcounter (get-field pos our-tank))))))
+
+(define level-stats%
+  (class object%
+    
+    (init lev)
+    (init enem)
+    
+    (init-field [stage lev])
+    (init-field [total-enemies enem])
+    (init-field [enemies-yet2come enem])
+    (init-field [enemy-dead 0])
+    (init-field [lives 4])
+    (init-field [list-of-enemies '()])
+    (init-field [our-bullets '()])
+    (init-field [enemy-bullets '()])
+    (super-new)
+    
+    (define/public (addourbullet l)(set! our-bullets (cons l bullets)))
+    
+    (define/public (addenemybullet l) (set1 enemy-bullets (cons l enemy-bullets)))
+    
+    (define/public (add-enemy object) (set! list-of-enemies (cons object list-of-enemies)))
+    
+    (define/public (onedead)
+      (set! enemy-dead (+ enemy-dead 1)))
+    
+    (define/public (killed)
+      (set! lives [- lives 1]))))
+    
+  
+
+
+(define window1 (open-pixmap "tankwars" 950 690))
+(copy-viewport window window1)
+(define game-mat 1)
+(define time 0)
+(define main 1)
+(define current-stats 1)
+(define our-tank 1)
+(define (startgame)
+  (start-game 1))
+(define (start-game lev)
+  (define init
+    (begin
+      (set! game-mat (mat-gen lev))
+      (set! our-tank (make-object our-tank% 1 4))
+      (set! current-stats (make-object level-stats% lev (+ 12 (* 4 lev))))))
+  (begin
+    init
+    (set! main (open-viewport "Tank Wars" 950 690))
+    (copy-viewport window main)
+    (begin
+      (produce-enemy 1)
+      (update-points-for-each))
+    (begin
+      (produce-ourtank)
+      (set! time (current-seconds))
+      (graphics-update-pixmap-tanks)
+      (update-graphics)
+      (begin-gameplay))))
+
+
+(define (produce-ourtank) (killed))
+
+(define (begin-gameplay)
+  (ourtank-movement)
+  (enemytank-movement)
+  (graphics-update-pixmap-tanks)
+  (check-timer)
+  (bullet-move)
+  (graphics-update-pixmap-bullets)
+  (bullet-check)
+  (update-graphics)
+  (check-enemy-killed)
+  (begin-gameplay))
+
+(define (update-graphics) (copy-viewport window main))
+
+(define (graphics-update-pixmap-tanks)
+  (begin
+    (copy-viewport window1 window)
+    (place-our-tank)
+    (place-enemy-tanks)))
+
+(define (place-our-tank)
+  (let([x (car (get-field pos our-tank))]
+       [y (cdr (get-field pos our-tank))]
+       [dir (get-field dir our-tank)])
+    (if(equal? dir 'up) ((draw-pixmap window) "C:/project/tanku.jpg" (make-posn x y))
+       (if(equal? dir 'down) ((draw-pixmap window) "C:/project/tankd.jpg" (make-posn x y))
+          (if(equal? dir 'right) ((draw-pixmap window ) "C:/project/tankr.jpg" (make-posn x y))
+             (if(equal? dir 'left) ((draw-pixmap window) "C:/project/tankl.jpg" (make-posn x y))
+                (error "undefined dir")))))))
+
+(define (place-enemy-tanks)
+  (define enemies (get-field list-of-enemies current-stats))
+  (define (helper l)
+    (map (λ(t)(let([x (car (get-field pos t))]
+                    [y (cdr (get-field pos t))]
+                    [dir (get-field dir t)])
+                 (if(equal? dir 'up) ((draw-pixmap window) "C:/project/enemyu.jpg" (make-posn x y))
+                    (if(equal? dir 'down) ((draw-pixmap window) "C:/project/enemyd.jpg" (make-posn x y))
+                       (if(equal? dir 'right) ((draw-pixmap window ) "C:/project/enemyr.jpg" (make-posn x y))
+                          (if(equal? dir 'left) ((draw-pixmap window) "C:/project/enemyl.jpg" (make-posn x y))
+                             (begin
+                               (display dir)
+                             (error "undefined dir")))))))) l))
+  (helper enemies))
+
+(define (graphics-update-pixmap-bullets)
+  (define bullets (append (get-field enemy-bullets current-stats) (get-field our-bullets currecnt-stats)))
+  (define (helper l)
+    (map (λ(t)(let([x (car (car t))]
+                   [y (cdr (car t))]
+                   [dir (cadr t)])
+                ((draw-solid-ellipse window) (make-posn x y) 10 10 "black"))) l))
+  (helper bullets))
+
+(define (killed)
+  
+    (if(equal? #f (check-ourtank))(endgame)
+       (begin
+         (produce-ourtank-graphics)
+       (update-ourtank))))
+
+(define (produce-ourtank-graphics)void)
+  
+
+(define (check-ourtank)
+  (if(= (get-field lives our-tank) 0)#f #t))
+
+(define (update-ourtank)
+  (begin
+    (send our-tank killed)
+    (set-field! pos our-tank (cons 240 630))
+    (set-field! dir our-tank 'up)))
+
+(define (endgame)
+  (begin
+    (close-viewport main)
+    (close-graphics)))
+
+(define (check-enemy-killed)
+  (if (= (get-field enemy-killed current-stats) (get-field total-enemies current-stats)) (next-stage)))
+
+(define (next-stage) (start-game (+ (get-field stage current-stats) 1)))
+
+(define (check-timer)
+  (define (prior i)
+    (let([tp (modulo (- (current-seconds) time) 10)])
+      (if(= i 1)(set! i 1)
+         (if(and (>= tp 0) (< tp 1))(begin
+                                      (change-prior-for-each)
+                                      (prior 1))
+            (set! i 1)))))
+  (define (produce i)
+    (let([te (modulo (- (current-seconds) time) 5)])
+      (if(= i 1)(set! i 1)
+         (if(and (>= te 0) (< te 1))(begin
+                                      (produce-enemy 1)
+                                      (produce 1))
+            (set! i 1)))))
+  (define (change-points i)
+    (let([tc (modulo (- (current-seconds) time) 2)])
+      (if(= i 1)(set! i 1)
+         (if(and (>= tc 0) (< tc 1))(begin
+                                      (update-points-for-each)
+                                      (change-points 1))
+            (set! i 1)))))
+  (define (change-path i)
+    (let([tp (modulo (- (current-seconds) time0) 5)])
+      (if(= i 1)(set! i 1)
+         (if( and (>= tc 0) (< tc 1))(begin
+                                       (update-path-for-each)
+                                       (change-path 1))
+            (set! i 1)))))
+  
+  (begin
+    (prior 0)
+    (produce 0)
+    (change-points 0)
+    (change-path 0)))
+
+(define (update-path-for-each)
+  (define enemies (get-field list-of-enemies current-stats))
+  (define (helper l)
+    (if(null? l)void
+       (let([enemy (car l)])
+         (begin
+           (send enemy shortest-path)
+           (helper (cdr l))))))
+  (helper enemies))
+
+(define (update-points-for-each)
+  (define enemies (get-field list-of-enemies current-stats))
+  (define (helper l)
+    (if(null? l)void
+       (let([enemy (car l)])
+         (begin
+           (send enemy update-points)
+           (helper (cdr l))))))
+  (helper enemies))
+
+(define (change-prior-for-each)
+  (define enemies (get-field list-of-enemies current-stats))
+  (define (helper l)
+    (if(null? l)void
+       (let([enemy (car l)])
+         (begin
+           (send enemy change-priority)
+           (helper (cdr l))))))
+  (helper enemies))
+
+(define (graphics-produce-enemy lev)
+  (begin
+    (send current-stats add-enemy (make-object enemy-tank% (cons 30 30) 'down lev))
+    (send current-stats add-enemy (make-object enemy-tank% (cons 600 30) 'down lev)
+          )))
+  
+(define (produce-enemy lev)
+  (if(equal? check-stats #f)void
+     (begin
+       (graphics-produce-enemy lev)
+       (update-enemy lev))))
+(define (check-stats)
+  (if(= (get-field enemies-yet-to-come current-stats) 0)#f
+     #t))
+
+(define (update-enemy lev)
+    (set-field! enemies-yet2come current-stats (- (get-field enemies-yet2come current-stats) 2)))
+
+(define (check dir i)
+     (let((point (send our-tank get-pos))) 
+      (cond [(equal? dir 'up) (if (= i 5) #t (if (and (= ((get-pixel fake) (make-posn (car point) (- (cdr point) i))) 0)
+                                                      (= ((get-pixel fake) (make-posn (+ (car point) 15) (- (cdr point) i))) 0)
+                                                      (= ((get-pixel fake) (make-posn (+ (car point) 30) (- (cdr point) i))) 0))
+                                                 (check dir (+ i 1)) #f))]
+            [(equal? dir 'down) (if (= i 5) #t (if (and (= ((get-pixel fake) (make-posn (+ (car point) 15) (+ i 45 (cdr point)))) 0)
+                                                        (= ((get-pixel fake) (make-posn (+ (car point) 30) (+ i 45 (cdr point)))) 0)
+                                                        (= ((get-pixel fake) (make-posn (car point) (+ i 45 (cdr point)))) 0))
+                                                   (check dir (+ i 1)) #f))]
+            [(equal? dir 'left) (if (= i 5) #t (if (and (= ((get-pixel fake) (make-posn (- (car point) i) (cdr point))) 0)
+                                                        (= ((get-pixel fake) (make-posn (- (car point) i) (+ (cdr point) 15))) 0)
+                                                        (= ((get-pixel fake) (make-posn (- (car point) i) (+ (cdr point) 30))) 0))
+                                                   (check dir (+ i 1)) #f))]
+            [(equal? dir 'right) (if (= i 5) #t (if (and (= ((get-pixel fake) (make-posn (+ i 30 (car point)) (cdr point))) 0)
+                                                         (= ((get-pixel fake) (make-posn (+ i 30 (car point)) (+ (cdr point) 15))) 0)
+                                                         (= ((get-pixel fake) (make-posn (+ i 30 (car point)) (+ (cdr point) 30))) 0))
+                                                    (check dir (+ i 1)) #f))])))
+
+(define(ourtank-movement)
+    (let ((dir  (ready-key-press window)))
+    (cond[(equal? dir #f)(begin
+                           (set-field! pos our-tank (get-field pos our-tank))
+                           (set-field! dir our-tank (get-field dir our-tank)))]
+         [(equal? (key-value dir) 'up) 
+          (if(equal? (get-field direction our-tank) 'up)
+             (if(equal? (check (key-value dir) 0) #t)
+                (send our-tank set-pos (cons 0 -5))
+                (send our-tank set-pos (cons 0 0)))
+                (send our-tank set-dir 'up))]
+          [(equal? (key-value dir) 'down) 
+          (if(equal? (get-field direction our-tank) 'down)
+             (if(equal? (check (key-value dir) 0) #t)
+                (send our-tank set-pos (cons 0 5))
+                (send our-tank set-pos (cons 0 0)))
+                (send our-tank set-dir 'down))]
+           [(equal? (key-value dir) 'rigth) 
+          (if(equal? (get-field direction our-tank) 'rigth)
+             (if(equal? (check (key-value dir) 0) #t)
+                (send our-tank set-pos (cons 5 0))
+                (send our-tank set-pos (cons 0 0)))
+                (send our-tank set-dir 'rigth))]
+            [(equal? (key-value dir) 'left) 
+          (if(equal? (get-field direction our-tank) 'left)
+             (if(equal? (check (key-value dir) 0) #t)
+                (send our-tank set-pos (cons -5 0))
+                (send our-tank set-pos (cons 0 0)))
+                (send our-tank set-dir 'left))]
+            [(equal? (key-value dir) 'space)
+             (let ((dr (get-field dir our-tank))
+                   (pos (get-field pos our-tank)))
+               (cond[(equal? dr 'up) 
+                     (let ((lis (list (cons (+ (car pos) 10) (- (cdr pos) 5)) dr)))
+                       (send our-tank add-bullet lis))]
+                    [(equal? dr 'down) 
+                     (let ((lis (list (cons (+ (car pos) 10) (+ (cdr pos) 5)) dr)))
+                       (send our-tank add-bullet lis))]
+                    [(equal? dr 'rigth) 
+                     (let ((lis (list (cons (+ (car pos) 5) (+ (cdr pos) 10)) dr)))
+                       (send our-tank add-bullet lis))]
+                    [(equal? dr 'left) 
+                     (let ((lis (list (cons (- (car pos) 5)  (+ (cdr pos) 10) ) dr)))
+                       (send our-tank add-bullet lis))]))])))
+
+(define(update l)
+  (let ((pos (car l))
+        (dr (cadr l)))
+    (cond[(equal? dr 'up) (list (cons  (car pos) (- (cdr pos) 5)) dr)]
+         [(equal? dr 'down) (list (cons (car pos) (+ (cdr pos) 5)) dr)]
+         [(equal? dr 'rigth) (list (cons (+ (car pos) 5)(cdr pos)) dr)]
+         [(equal? dr 'left) (list (cons (- (car pos) 5) (cdr pos)) dr)])))
+       
+(define (bullet-move)
+  (let((blt ((get-field bullets our-tank))))
+    (map update blt)))
+  
+
+(define (checkb dir i)
+  (define play-arena window)
+  
+  (let((point (send our-tank get-pos))) 
+    (cond [(equal? dir 'up) (if (= i 5) #t (if (and (= ((get-pixel play-arena) (make-posn (car point) (- (cdr point) i))) 0)
+                                                    (= ((get-pixel play-arena) (make-posn (+ (car point) 5) (- (cdr point) i))) 0)
+                                                    (= ((get-pixel play-arena) (make-posn (+ (car point) 10) (- (cdr point) i))) 0))
+                                               (check dir (+ i 1)) #f))]
+          [(equal? dir 'down) (if (= i 5) #t (if (and (= ((get-pixel play-arena) (make-posn (+ (car point) 5) (+ i 10 (cdr point)))) 0)
+                                                      (= ((get-pixel play-arena) (make-posn (+ (car point) 10) (+ i 10 (cdr point)))) 0)
+                                                      (= ((get-pixel play-arena) (make-posn (car point) (+ i 10 (cdr point)))) 0))
+                                                 (check dir (+ i 1)) #f))]
+          [(equal? dir 'left) (if (= i 5) #t (if (and (= ((get-pixel play-arena) (make-posn (- (car point) i) (cdr point))) 0)
+                                                      (= ((get-pixel play-arena) (make-posn (- (car point) i) (+ (cdr point) 5))) 0)
+                                                      (= ((get-pixel play-arena) (make-posn (- (car point) i) (+ (cdr point) 10))) 0))
+                                                 (check dir (+ i 1)) #f))]
+          [(equal? dir 'right) (if (= i 5) #t (if (and (= ((get-pixel play-arena) (make-posn (+ i 10 (car point)) (cdr point))) 0)
+                                                       (= ((get-pixel play-arena) (make-posn (+ i 10 (car point)) (+ (cdr point) 5))) 0)
+                                                       (= ((get-pixel play-arena) (make-posn (+ i 10 (car point)) (+ (cdr point) 10))) 0))
+                                                  (check dir (+ i 1)) #f))])))
+(define (check1 dir x y i)
+  (define play-arena window)
+  (cond[(equal? dir 'up) (if (= i 6)#t  (cond [(= ((get-color-pixel play_arena) (make-posn (+ x 5) (- y i))) (make-rgb (/ 44 85) (/ 4 17) (/ 12 85))) 1]
+                                              [(= ((get-color-pixel play_arena) (make-posn (+ x 5) (- y i))) (make-rgb 0 0 0)) 2]
+                                              [(= ((get-color-pixel play_arena) (make-posn (+ x 5) (- y i))) (make-rgb 0 1 0)) 3]
+                                              [else (check1 dir x y (+ i 1))]
+                                              ))]
+       [(equal? dir 'down) (if (= i 6)#t  (cond [(= ((get-color-pixel play_arena) (make-posn (+ x 5) (+ y i))) (make-rgb (/ 44 85) (/ 4 17) (/ 12 85))) 1]
+                                                [(= ((get-color-pixel play_arena) (make-posn (+ x 5) (+ y i))) (make-rgb 0 0 0)) 2]
+                                                [(= ((get-color-pixel play_arena) (make-posn (+ x 5) (+ y i))) (make-rgb 0 1 0)) 3]
+                                                [else (check1 dir x y (+ i 1))]
+                                                ))]
+       [(equal? dir 'rigth) (if (= i 6)#t  (cond [(= ((get-color-pixel play_arena) (make-posn (+ x i) (+ y 5))) (make-rgb (/ 44 85) (/ 4 17) (/ 12 85))) 1]
+                                                 [(= ((get-color-pixel play_arena) (make-posn (+ x i) (+ y 5))) (make-rgb 0 0 0)) 2]
+                                                 [(= ((get-color-pixel play_arena) (make-posn (+ x i) (+ y 5))) (make-rgb 0 1 0)) 3]
+                                                 [else (check1 dir x y (+ i 1))]
+                                                 ))]
+       [(equal? dir 'up) (if (= i 6)#t  (cond [(= ((get-color-pixel play_arena) (make-posn (- x i) (+ y 5))) (make-rgb (/ 44 85) (/ 4 17) (/ 12 85))) 1]
+                                              [(= ((get-color-pixel play_arena) (make-posn (- x i) (+ y 5))) (make-rgb 0 0 0)) 2]
+                                              [(= ((get-color-pixel play_arena) (make-posn (- x i)(+ y 5))) (make-rgb 0 1 0)) 3]
+                                              [else (check1 dir x y (+ i 1))]
+                                              ))]))
+
+
+(define(blt-h l)
+  (let* ((pos (car l))
+         (x (car pos))
+         (y (cdr pos))
+         (dr  (cadr l))
+         (enems (get-field list-of-enemies current-stats)))
+    (define(helper l l1)
+      (if (null? l) 'lev-complet
+          (cond[(equal? dr 'up) (if(checkb pos 0) (list (cons (car pos) (- (cdr pos) 5)) dr)
+                                   (let* ((en-pos (get-field pos (car l)))
+                                          (pow (get-field power (car l)))
+                                          (x1 (car en-pos))
+                                          (y1 (cdr en-pos))
+                                          (chk (check1 dir x y 0)))
+                                     (cond[(and(and (> x1 (- x 30)) (< x1 (+ x 10))) (and (> y1 (- y 35)) (< y1 (- y 30))))
+                                           
+                                           (begin
+                                             (if(equal? pow 1) (set-field! list-of-enemies current-states (append l1 (cdr l)))
+                                                (set-field! power (car l) (- pow 1)))
+                                             (send current-stats onedead)
+                                             '())]
+                                          [(equal? chk 1) 
+                                           (begin
+                                             (delete-brick x y dir)
+                                             '())]
+                                          [(equal? chk 2) '()]
+                                          [(equal? chk 3) (list (cons (car pos) (- (cdr pos) 5)) dr)])))]
+               [(equal? dr 'down) (if(checkb pos 0) (list (cons (car pos) (+ (cdr pos) 5)) dr)
+                                     (let* ((en-pos (get-field pos (car l)))
+                                            (x1 (car en-pos))
+                                            (y1 (cdr en-pos))
+                                            (chk (check1 dir x y 0)))
+                                       (cond[(and(and (> x1 (- x 30)) (< x1 (+ x 10))) (and (< y1 (+ y 15)) (> y1 (+ y 10))))
+                                             
+                                             (begin
+                                               (set-field! list-of-enemies current-states (append l1 (cdr l)))
+                                               (send current-stats onedead)
+                                               '())]
+                                            [(equal? chk 1) 
+                                             (begin
+                                               (delete-brick x y dir)
+                                               '())]
+                                            [(equal? chk 2) '()]
+                                            [(equal? chk 3) (list (cons (car pos) (+ (cdr pos) 5)) dr)])))]
+               [(equal? dr 'rigth) (if(checkb pos 0) (list (cons (+ (car pos) 5) (cdr pos)) dr)
+                                      (let* ((en-pos (get-field pos (car l)))
+                                             (x1 (car en-pos))
+                                             (y1 (cdr en-pos))
+                                             (chk (check1 dr x y 0)))
+                                        (cond[(and(and (> x1 (+ x 10)) (< x1 (+ x 15))) (and (< y1 (- y 30)) (> y1 (+ y 10))))
+                                              
+                                              (begin
+                                                (set-field! list-of-enemies current-states (append l1 (cdr l)))
+                                                (send current-stats onedead)
+                                                '())]
+                                             [(equal? chk 1) 
+                                              (begin
+                                                (delete-brick x y dir)
+                                                '())]
+                                             [(equal? chk 2) '()]
+                                             [(equal? chk 3) (list (cons (car pos) (+ (cdr pos) 5)) dr)])))]
+               [(equal? dr 'left) (if(checkb pos 0) (list (cons (- (car pos) 5) (cdr pos)) dr)
+                                     (let* ((en-pos (get-field pos (car l)))
+                                            (x1 (car en-pos))
+                                            (y1 (cdr en-pos))
+                                            (chk (check1 dr x y 0)))
+                                       (cond[(and(and (< x1 (- x 40)) (> x1 (- x 45))) (and (< y1 (+ y 40)) (> y1 y)))
+                                             
+                                             (begin
+                                               (set-field! list-of-enemies current-states (append l1 (cdr l)))
+                                               (send current-stats onedead)
+                                               '())]
+                                            [(equal? chk 1) 
+                                             (begin
+                                               (delete-brick x y dir)
+                                               '())]
+                                            [(equal? chk 2) '()]
+                                            [(equal? chk 3) (list (cons (car pos) (+ (cdr pos) 5)) dr)])))]
+               [else (helper (cdr l) (append l1 (list car l)))])))
+    (helper (get-field bullets our-tank) '())))
+
+(define (ourbt-check)
+  (define(helper l)
+    (if (null? l) '()
+        (let ((val (blt-h (car l))))
+          (cond[(null? val) (cons (helper (cdr l)) val)]
+               [(equal? val 'lev-complet) (next-level)]
+               [(list? val) (cons val (helper (cdr l)))]))))
+  (helper (get-field bullets our-tank)))
+(define(bullet-check)
+  (begin
+    (ourbt-check)
+    (enem-blt current-stats)))
+
+(define(enem-blt ob)
+  (let*((enm-lst (get-field bullets ob))
+        (tn (get-field pos our-tank))
+        (x1 (car tn))
+        (y1 (cdr tn)))
+    (define(helper l l1)
+      (if(null? l) (set-field! bullets ob l1)
+         (let ((pos (car l))
+               (x (car pos))
+               (y (cdr pos))
+               (dr (cadr (car l))))
+           (cond[(equal? dr 'up) (if(checkb pos 0) (helper (cdr l) (append l1 (list (cons (car pos) (- (cdr pos) 5)) dr)))
+                                    (let((chk (check1 dr x y 0)))
+                                      (cond[(and(and (> x1 (- x 30)) (< x1 (+ x 10))) (and (> y1 (- y 35)) (< y1 (- y 30))))
+                                            (begin
+                                              (if(equal? (get-field power our-tank) 1) (send our-tank killed)
+                                                 (set-field! power our-tank (- power 1)))
+                                              (helper (cdr l) l1))]
+                                           [(equal? chk 1) 
+                                            (begin
+                                              (delete-brick x y dir)
+                                              (helper (cdr l) l1))]
+                                           [(equal? chk 2) (helper (cdr l) l1)]
+                                           [(equal? chk 3) (helper (cdr l) (append l1 (list (cons (car pos) (- (cdr pos) 5)) dr)))])))]
+                [(equal? dr 'down) (if(checkb pos 0) (helper (cdr l) (append l1 (list (cons (car pos) (+ (cdr pos) 5)) dr)))
+                                      (let((chk (check1 dr x y 0)))
+                                        (cond[(and(and (> x1 (- x 30)) (< x1 (+ x 10))) (and (> y1 (+ y 10)) (< y1 (+ y 15))))
+                                              (begin
+                                                (if(equal? (get-field power our-tank) 1) (send our-tank killed)
+                                                   (set-field! power our-tank (- power 1)))
+                                                (helper (cdr l) l1))]
+                                             [(equal? chk 1) 
+                                              (begin
+                                                (delete-brick x y dir)
+                                                (helper (cdr l) l1))]
+                                             [(equal? chk 2) (helper (cdr l) l1)]
+                                             [(equal? chk 3) (helper (cdr l) (append l1 (list (cons (car pos) (+ (cdr pos) 5)) dr)))])))]
+                [(equal? dr 'rigth) (if(checkb pos 0) (helper (cdr l) (append l1 (list (cons (+ (car pos) 5)  (cdr pos)) dr)))
+                                       (let((chk (check1 dr x y 0)))
+                                         (cond[(and(and (> x1 (+ x 10)) (< x1 (+ x 15))) (and (< y1 (- y 30)) (> y1 (+ y 10))))
+                                               (begin
+                                                 (if(equal? (get-field power our-tank) 1) (send our-tank killed)
+                                                    (set-field! power our-tank (- power 1)))
+                                                 (helper (cdr l) l1))]
+                                              [(equal? chk 1) 
+                                               (begin
+                                                 (delete-brick x y dir)
+                                                 (helper (cdr l) l1))]
+                                              [(equal? chk 2) (helper (cdr l) l1)]
+                                              [(equal? chk 3) (helper (cdr l) (append l1 (list (cons (- (car pos) 5) (cdr pos) dr))))])))]
+                [(equal? dr 'left) (if(checkb pos 0) (helper (cdr l) (append l1 (list (cons (+ (car pos) 5)  (cdr pos)) dr)))
+                                      (let((chk (check1 dr x y 0)))
+                                        (cond[(and(and (> x1 (- x 5)) (< x1 x )) (and (< y1 (- y 30)) (> y1 (+ y 10))))
+                                              (begin
+                                                (if(equal? (get-field power our-tank) 1) (send our-tank killed)
+                                                   (set-field! power our-tank (- power 1)))
+                                                (helper (cdr l) l1))]
+                                             [(equal? chk 1) 
+                                              (begin
+                                                (delete-brick x y dir)
+                                                (helper (cdr l) l1))]
+                                             [(equal? chk 2) (helper (cdr l) l1)]
+                                             [(equal? chk 3) (helper (cdr l) (append l1 (list (cons (- (car pos) 5) (cdr pos) dr))))])))]))))
+    (helper enm-list '())))
+(define (enemytank-movement)
+  (define enemies (get-field list-of-enemies current-stats))
+  (define (helper l)
+    (if(null? l)(set! l '())
+       (let* ([enemy (car l)]
+              [dir (get-field dir enemy)]
+              [x (car (get-field pos enemy))]
+              [y (cdr (get-field pos enemy))]
+              [waytoking (get-field way2king enemy)]
+              [waytotank (get-field way2rtank enemy)])
+         (if(equal? (get-field priority enemy) 'k)
+            (if(null? waytoking)
+               (if (equal? (get-field dir enemy) (correct-dir-k))
+                   (if (< (random) .8)
+                       (if (equal? dir 'up)(send current-stats addenemybullets (list (cons (+ x 10) (- y 5)) dir))
+                           (if(equal? dir 'down)(send current-stats addenemybullets (list (cons (+ x 10) (+ y 35)) dir))
+                              (if(equal? dir 'right)(send current-stats addenemybullets (list (cons (+ x 35) (+ y 10)) dir))
+                                 (if(equal? dir 'left)(send current-stats addenemybullets (list (cons (- x 5) (+ y 10)) dir))
+                                    (error "undefined dir")))))
+                       (begin
+                         (set-field! dir enemy (turn-arbit))
+                         (shoot dir enemy x y)
+                         (set-field! dir enemy (turn-arbit))))
+                   (set-field! dir enemy (correct-dir-k)))
+               (let ([waytoking (cdr (get-field way-to-king enemy))])
+                 (if (equal? dir (face-the-path waytoking))
+                     (if(< (random) .8)(set-field! pos enemy (car (waytoking)))
+                        (begin
+                          (shoot dir enemy x y)
+                          (set-field! dir enemy (turn-arbit))))
+                     (set-field! dir enemy (face-the-path waytoking)))))
+            (if(null? waytotank)
+               (if (equal? (get-field dir enemy) (correct-dir-t enemy))
+                   (if (< (random) .8)
+                       (if (equal? dir 'up)(send currentstats addenemybullets (list (cons (+ x 10) (- y 5)) dir))
+                           (if(equal? dir 'down)(send currentstats addenemybullets (list (cons (+ x 10) (+ y 35)) dir))
+                              (if(equal? dir 'right)(send currentstats addenemybullets (list (cons (+ x 35) (+ y 10)) dir))
+                                 (if(equal? dir 'left)(send currentstats addenemybullets (list (cons (- x 5) (+ y 10)) dir))
+                                    (error "undefined dir")))))
+                       (begin
+                         (shoot dir enemy x y)
+                         (set-field! dir enemy (turn-arbit))))
+                   (set-field! dir enemy (correct-dir-t enemy)))
+               (let ([waytotank (cdr (get-field way-to-tank enemy))])
+                 (if (equal? dir (face-the-path waytotank))
+                     (if(< (random) .8)(set-field! pos enemy (car (waytotank)))
+                        (begin
+                          (set-field! dir enemy (turn-arbit))
+                          (shoot dir x y)
+                          (set-field! dir enemy (turn-arbit))))
+                     (set-field! dir enemy (face-the-path waytotank)))))))))
+  (helper enemies))
+
+(define (correct-dir-k)
+  (let([x-of-k 300]
+       [y-of-k 600]
+       [x-of-t (car (get-field pos our-tank))]
+       [y-of-t (cdr (get-field pos our-tank))])
+    (if(and (= x-of-t x-of-k) (> y-of-k y-of-t))'down
+       (if(and (= y-of-t y-of-k) (< x-of-t x-of-k))'right
+          (if(and (= y-of-t y-of-k) (< x-of-k x-of-t))'left
+             (set! x-of-k 300))))))
+
+(define (correct-dir-t enemy)
+  (let([x-of-e (car (get-field pos enemy))]
+       [y-of-e (cdr (get-field pos enemy))]
+       [x-of-t (car (get-field pos our-tank))]
+       [y-of-t (cdr (get-field pos our-tank))])
+    (if(and (= y-of-t y-of-e) (< x-of-e y-of-t))'right
+       (if(and (= y-of-e y-of-t) (< x-of-t y-of-e))'left
+          (if(and (= x-of-e x-of-t) (> y-of-e y-of-t))'up
+             (if(and (= x-of-e x-of-t) (> y-of-t y-of-e))'down))))))
+
+(define (face-the-path path)
+  (let([x-of-e (car (get-field pos enemy))]
+       [y-of-e (cdr (get-field pos enemy))]
+       [x-of-first (car (car path))]
+       [y-of-first (cadr (car path))])
+    (if(and (= x-of-e x-of-first) (< y-of-e y-of-first))'down
+       (if(and (= x-of-e x-of-first) (< y-of-first y-of-e))'up
+          (if (and (= y-of-e y-of-first) (< x-of-first x-of-e))'left
+              (if(and (= y-of-e y-of-first) (< x-of-e x-of-first))'right))))))
+
+(define (shoot dir x y)
+  (if (equal? dir 'up)(send currentstats addenemybullets (list (cons (+ x 10) (- y 5)) dir))
+      (if(equal? dir 'down)(send currentstats addenemybullets (list (cons (+ x 10) (+ y 35)) dir))
+         (if(equal? dir 'right)(send currentstats addenemybullets (list (cons (+ x 35) (+ y 10)) dir))
+            (if(equal? dir 'left)(send currentstats addenemybullets (list (cons (- x 5) (+ y 10)) dir))
+               (error "undefined dir"))))))
+

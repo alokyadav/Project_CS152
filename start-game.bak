@@ -1,0 +1,18 @@
+(include "mat-gen.rkt")
+(define game-mat 1)
+(define main 1)
+(define current-stats 1)
+(define our-tank 1)
+(define (startgame)
+  (start-game 1))
+(define (start-game lev)
+  (define init
+    (begin
+      (set! game-mat (mat-gen lev))
+      (set! our-tank (make-object our-tank% 1 4))
+      (set! current-stats (make-object level-stats% lev (= 15 (* 3 lev))))))
+  (begin
+    init
+    (set! window (open-pixmap "Tank Wars" 950 690))
+    ()
+  

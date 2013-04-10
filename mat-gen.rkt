@@ -1,0 +1,306 @@
+(require graphics/graphics)
+(define (build-matrix r c i)
+  (build-vector r (λ(x)(make-vector c i))))
+
+(define (matrix-ref mat r c)
+  (vector-ref (vector-ref mat r) c))
+
+(define (matrix-set! mat r c val)
+  (vector-set! (vector-ref mat r) c val))
+
+(define (list-make n a)
+  (define (helper l i)
+    (if(= i n)l
+       (helper (cons a l) (+ i 1))))
+  (helper '() 0))
+
+;0 - air
+;1 - brick
+;120 brick in 18*18 matrix
+
+(define game-mat (build-matrix 18 18 -1))
+
+(define (mat-gen1 game-mat)
+  (define paths 1)
+  (define (openings n)
+    (define (helper l i)
+      (if(= i n)l
+         (helper (cons (+ (random 8) 1) l) (+ i 1))))
+    (helper '() 0))
+  (define (change-val mat)
+    (define (helper r c)
+      (if(> r 17)(set! r c)
+         (if(= r 17)(matrix-set! mat r c 0)
+            (begin
+              (matrix-set! mat r c 0)
+              (if(< (random) .5)(helper (+ r 1) c)
+                 (if(< (random) .5)
+                    (if(not (= c 0))(helper r (- c 1))
+                       (helper r (+ c 1)))
+                    (if(not (= c 8))(helper r (+ c 1))
+                       (helper r (- c 1)))))))))
+    (let([l (cons 0 (openings paths))])
+      (begin
+        (helper 0 (car l))
+        (if(null? (cdr l))(helper 200000 0)
+           (helper 0 (cadr l)))
+        (if(null? (cdr l))(helper 200000 0)
+           (if(null? (cddr l))(helper 200000 0)
+              (helper 0 (caddr l)))))))
+  (change-val game-mat))
+
+(define (mat-gen level)
+  (define game-mat (build-matrix 18 18 -1))
+  (begin
+    (mat-gen2 game-mat)
+    (add-stones game-mat)
+    (mat-gen1 game-mat)
+    (add-shade game-mat)
+    (mat-gen3 game-mat)
+    (convert game-mat)
+    (add-boundary (add-the-rest game-mat))))
+
+(define (add-boundary mat)
+  (define game-mat (build-matrix 23 22 2))
+  (define (helper matrix r c)
+    (if(= r 22)matrix
+       (if(= c 21)(helper matrix (+ r 1) 1)
+          (begin
+            (matrix-set! matrix r c (matrix-ref mat (- r 1) (- c 1)))
+            (helper matrix r (+ c 1))))))
+  (helper game-mat 1 1))
+
+
+(define (count mat c1 c2 r1 r2 val)
+  (define (helper1 count r c)
+    (define (helper2 count r c)
+      (if(= c (+ c2 1))count
+         (if(equal? (matrix-ref mat r c) val)(helper2 (+ count 1) r (+ c 1))
+            (helper2 count r (+ c 1)))))
+    (if(= r (+ r2 1))count
+       (helper1 (+ count (helper2 0 r c)) (+ r 1) c)))
+  (helper1 0 r1 c1))
+
+
+(define (mat-gen2 mat)
+  (define n (count mat 0 8 0 17 -1))
+  (define (helper r1 r2 c1 c2)
+    (define (helper1 one zero r c)
+      (define (helper2 one zero r c)
+        (if(= c (+ c2 1))(cons one zero)
+           (if(= one 90)(cons one zero)
+              (if(= n (+ one zero))(cons one zero)
+                 (if(equal? (matrix-ref mat r c) -1)(if(< (random) (/ (- 90 one) (- n (+ one zero))))(begin
+                                                                                                       (matrix-set! mat r c 1)
+                                                                                                       (helper2 (+ one 1) zero r (+ c 1)))
+                                                       (begin
+                                                         (matrix-set! mat r c 0)
+                                                         (helper2 one (+ zero 1) r (+ c 1))))
+                    (helper2 one zero r (+ c 1)))))))
+      (if(= r (+ r2 1))(set! r 2)
+         (let([help (helper2 one zero r c)])
+           (helper1 (car help) (cdr help) (+ r 1) 0))))
+    (helper1 0 0 r1 c1))
+  (helper 0 17 0 8))
+
+(define (mat-gen3 mat)
+  (define (helper r1 r2 c1 c2)
+    (define (helper1 r c)
+      (define (helper2 r c)
+        (if(= c (+ c2 1))(set! r 2)
+           (begin
+             (matrix-set! mat r (- 17 c) (matrix-ref mat r c))
+             (helper2 r (+ c 1)))))
+      (if(= r (+ r2 1))(set! r 2)
+         (begin
+           (helper2 r c)
+           (helper1 (+ r 1) c))))
+    (helper1 r1 c1))
+  (helper 0 17 0 8))
+
+(define (convert mat)
+  (define (helper r c)
+    (if(= r 18)(set! r 2)
+       (if(= c 18)(helper (+ r 1) 0)
+          (if(= (matrix-ref mat r c) -1)(begin (matrix-set! mat r c 1)
+                                               (helper r (+ c 1)))
+             (helper r (+ c 1))))))
+  (helper 0 0))
+
+(define (add-stones mat)
+  (define (helper r c zero two)
+    (if(= two 4)(set! r 2)
+       (if(= r 18)(set! r 2)
+          (if(= c 9)(helper (+ r 1) 0 zero two)
+             (if(or (= (matrix-ref mat r c) 1) (= (matrix-ref mat r c) 0))(if(< (random) (/ (- 5 two) zero))(begin
+                                                                                                              (matrix-set! mat r c 2)
+                                                                                                              (helper r (+ c 1) (- zero 1) (+ two 1)))
+                                                                             (helper r (+ c 1) zero two))
+                (helper r (+ c 1) zero two))))))
+  (helper 0 0 (count mat 0 8 0 17 0) 0))
+
+
+
+(define (add-shade mat)
+  (define (helper r c three zero)
+    (if(= three 8)(set! r 2)
+       (if(= r 18)(set! r 2)
+          (if(= c 9)(helper (+ r 1) 0 three zero)
+             (if(= (matrix-ref mat r c) 0)(if(adjacent4 mat r c 3)(if(< (random) .7)(begin
+                                                                                      (matrix-set! mat r c 3)
+                                                                                      (helper r (+ c 1) (+ three 1) (- zero 1)))
+                                                                     (helper r (+ c 1) three zero))
+                                             (if(< (random) (/ (- 8 three) zero))(begin
+                                                                                   (matrix-set! mat r c 3)
+                                                                                   (helper r (+ c 1) (+ three 1) (- zero 1)))
+                                                (helper r (+ c 1) three zero)))
+                (helper r (+ c 1) three zero))))))
+  (helper 0 0 0 (count mat 0 8 0 17 0)))
+
+(define (adjacent4 mat r c val)
+  (if(and (= r 0) (= c 0))(if(or (= (matrix-ref mat (+ r 1) c) val)
+                                 (= (matrix-ref mat r (+ c 1)) val))#t #f)
+     (if(and (= r 17) (= c 17))(if(or
+                                   (= (matrix-ref mat (- r 1) c) val)
+                                   (= (matrix-ref mat r (- c 1)) val))#t #f)
+        (if(and (= r 0) (= c 17))(if(or(= (matrix-ref mat (+ r 1) c) val)
+                                       (= (matrix-ref mat r (- c 1)) val))#t #f)
+           (if(and (= r 17) (= c 0))(if(or
+                                        (= (matrix-ref mat r (+ c 1)) val)
+                                        (= (matrix-ref mat (- r 1) c) val))#t #f)
+              (if(and (= c 0) (not (= r 17)))(if(or(= (matrix-ref mat (+ r 1) c) val)
+                                                   (= (matrix-ref mat r (+ c 1)) val)
+                                                   (= (matrix-ref mat (- r 1) c) val))#t #f)
+                 (if(and (= c 17) (not (= r 0)))(if(or(= (matrix-ref mat (+ r 1) c) val)
+                                                      (= (matrix-ref mat (- r 1) c) val)
+                                                      (= (matrix-ref mat r (- c 1)) val))#t #f)
+                    (if(and (= r 0) (not (= c 17)))(if(or(= (matrix-ref mat (+ r 1) c) val)
+                                                         (= (matrix-ref mat r (- c 1)) val)
+                                                         (= (matrix-ref mat r (+ c 1)) val))#t #f)
+                       (if(and (= r 17) (not (= c 0)))(if(or(= (matrix-ref mat (- r 1) c) val)
+                                                            (= (matrix-ref mat r (+ c 1)) val)
+                                                            (= (matrix-ref mat r (- c 1)) val))#t #f)
+                          (if(and (= c 0) (not (= r 17)))(if(or
+                                                             (= (matrix-ref mat (+ r 1) c) val)
+                                                             (= (matrix-ref mat r (+ c 1)) val)
+                                                             (= (matrix-ref mat (- r 1) c) val))#t #f)
+                             (if(or
+                                 (= (matrix-ref mat (+ r 1) c) val)
+                                 (= (matrix-ref mat r (+ c 1)) val)
+                                 (= (matrix-ref mat (- r 1) c) val)
+                                 (= (matrix-ref mat r (- c 1)) val))#t #f)))))))))))
+
+(define (add-the-rest mat)
+  (define new-mat (build-matrix 21 20 0))
+  (define (add-top-stones c matrix)
+    (if(= c 19)(set! c 19)
+       (if(= (matrix-ref mat 0 (- c 1)) 1)(begin
+                                            (matrix-set! matrix 0 c 2)
+                                            (matrix-set! matrix 0 (- 19 c) 2))
+          (add-top-stones (+ c 1) matrix))))
+  (define (add-king matrix)
+    (begin
+      (matrix-set! matrix 20 9 7)
+      (matrix-set! matrix 20 10 7)
+      (matrix-set! matrix 20 8 1)
+      (matrix-set! matrix 20 11 1)
+      (matrix-set! matrix 19 8 1)
+      (matrix-set! matrix 19 9 1)
+      (matrix-set! matrix 19 10 1)
+      (matrix-set! matrix 19 11 1)))
+  (define (add-sides matrix)
+    (define (helper i j r)
+      (if(> r 19)(set! i 3)
+         (if(= i 4)(set! i 3)
+            (if(= j 2)(if(< (random) .2)(begin
+                                          (matrix-set! matrix r 0 1)
+                                          (matrix-set! matrix r 19 1)
+                                          (helper (+ i 1) j (+ r 1)))
+                         (helper i j (+ r 1)))
+               (if(< (random) .1)(begin
+                                   (matrix-set! matrix r 0 1)
+                                   (matrix-set! matrix r 19 1)
+                                   (helper (+ i 1) j (+ r 1)))
+                  (if(< (random) .3)(begin
+                                      (matrix-set! matrix r 0 2)
+                                      (matrix-set! matrix (- r 1) 0 0)
+                                      (matrix-set! matrix (+ r 1) 0 3)
+                                      (matrix-set! matrix (- r 1) 1 0)
+                                      (matrix-set! matrix r 1 0)
+                                      (matrix-set! matrix (+ r 1) 1 0)
+                                      (matrix-set! matrix r 19 2)
+                                      (matrix-set! matrix (- r 1) 19 0)
+                                      (matrix-set! matrix (+ r 1) 19 3)
+                                      (matrix-set! matrix (- r 1) 18 0)
+                                      (matrix-set! matrix r 18 0)
+                                      (matrix-set! matrix (+ r 1) 18 0)
+                                      (helper i (+ j 1) (+ r 2)))
+                     (helper i j (+ r 1))))))))
+    (helper 1 1 2))
+  (define (copy matrix)
+    (define (helper r c)
+      (if(= r 19)(set! r 2)
+         (if(= c 19)(helper (+ r 1) 1)
+            (begin
+              (matrix-set! matrix r c (matrix-ref mat (- r 1) (- c 1)))
+              (helper r (+ c 1))))))
+    (helper 1 1))
+  (begin
+    (copy new-mat)
+    (add-top-stones 1 new-mat)
+    (add-king new-mat)
+    (add-sides new-mat)
+    new-mat))
+
+(open-graphics)
+;(define many (open-viewport "tank wars" 660 690))
+(define window (open-pixmap "tank wars" 660 690))
+(define window3 (open-pixmap "tankwars" 950 690))
+((draw-viewport window3) "black")
+((draw-pixmap window3) "tankwars.jpg" (make-posn 660 0))
+
+(define (draw i j mat)
+  
+  (define a (cond [(= (matrix-ref mat i j) 0) void]
+                  [(= (matrix-ref mat i j) 1) (begin
+                                                ((draw-solid-rectangle window) (make-posn (* j 30) (* i 30)) 30 30 "brown")
+                                                ;((draw-rectangle window) (make-posn (* j 30) (* i 30)) 30 30 "black")
+                                              ((draw-pixmap window3) "block.jpg" (make-posn (* j 30) (* i 30)))
+                                              ((draw-rectangle window3) (make-posn (* j 30) (* i 30)) 30 30 "black"))]
+                  [(= (matrix-ref mat i j) 2)  (begin
+                                                 ((draw-solid-rectangle window) (make-posn (* j 30) (* i 30)) 30 30 "black")                                                 
+                                                 ((draw-pixmap window3) "stone.jpg" (make-posn (* j 30) (* i 30)))
+                                                 ((draw-rectangle window3) (make-posn (* j 30) (* i 30)) 30 30 "black"))]
+                  [(= (matrix-ref mat i j) 3) (begin
+                                                ((draw-solid-rectangle window) (make-posn (* j 30) (* i 30)) 30 30 "green")
+                                                ((draw-pixmap window3) "grass.jpg" (make-posn (* j 30) (* i 30))))]
+                  [(= (matrix-ref mat i j) 7) (begin
+                                                ((draw-solid-rectangle window) (make-posn (* j 30) (* i 30)) 30 30 "orange")
+                                                ((draw-solid-rectangle window3) (make-posn (* j 30) (* i 30)) 30 30 "orange"))]
+                  [else (begin ((draw-pixmap window) "gate.jpg" (make-posn (* j 50) (* i 50)))
+                               ((draw-string window) (make-posn (* j 50) (* i 50)) "end" "black"))]))
+  (cond [(and (= i 22) (= j 21)) a]
+        [(= i 22) (draw 0 (+ j 1) mat)]
+        [else (draw (+ i 1) j mat)]))
+
+(define (draw-grass i j mat)
+  (define a 
+    (if (= (matrix-ref mat i j) 3) 
+      (begin
+        ((draw-solid-rectangle window) (make-posn (* j 30) (* i 30)) 30 30 "green")
+        ((draw-pixmap window2) "grass.jpg" (make-posn (* j 30) (* i 30)))) (void)))
+  (cond [(and (= i 22) (= j 21)) a]
+        [(= i 22) (draw-grass 0 (+ j 1) mat)]
+        [else (draw-grass (+ i 1) j mat)]))
+;(define (my i) (begin (clear-viewport window)
+;                     (clear-viewport many)
+
+;                    (sleep 2)
+;                   (draw 0 0 (mat-gen i))
+;                  (copy-viewport window many)
+;                 (sleep 4)
+;                (my (+ i 1))))
+;(my 1)
+(define mat (mat-gen 2))
+(draw 0 0 mat)
+;(copy-viewport window3 many)

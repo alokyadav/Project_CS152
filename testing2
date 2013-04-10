@@ -1,0 +1,75 @@
+(define power%
+  (class object%
+    (init n)
+    (init s-time)
+    (init e-time)
+    (init x-cor)
+    (init y-cor)
+    (init-field [name n])
+    (init-field [start-time s-time])
+    (init-field [end-time e-time])
+    (init-field [x x-cor])
+    (init-field [y y-cor])
+    (super-new)))
+
+(define (remove-powers l)
+    (if(null? l) (void)
+    (let*([c (modulo (current-seconds) 5)]
+         [power (car l)]
+         [x (get-field x power)]
+         [y (get-field y power)]
+         [name (get-field name power)]
+         [t (get-field end-time power)]
+         [powers (list (make-object power% 'shield (current-seconds) (current-seconds) 30 30) (make-object power% 'king-shield (current-seconds) (+ (current-seconds) 4000) 500 400))])
+      (if(and (>= c 0) (< c 1))(if(= remove-i 1)(void)
+                                  (begin
+                                    (if(equal? name 'shield)
+                                     (if(equal? x 'taken)
+                                        (if(> (current-seconds) t)(begin
+                                                                    (set-field! powers current-stats (remove power powers))
+                                                                    (remove-powers (cdr l)))
+                                           (remove-powers (cdr l)))
+                                        (if(> (current-seconds) t)(begin
+                                                                    ((draw-solid-rectagle window3) (make-posn x y) 30 30 "black")
+                                                                    (set-field! powers current-stats (remove power powers))
+                                                                    (remove-powers (cdr l)))
+                                           (remove-powers)))
+                                     (if(equal? name 'king-shield)
+                                        (if(equal? c 'taken)
+                                           (if(> (current-seconds) t)(begin
+                                           (set-field powers current-stats (remove power powers))
+                                           ((draw-solid-rectangle window1) (make-posn 270 630) 30 30 "brown")
+                                           ((draw-solid-rectangle window1) (make-posn 270 600) 30 30 "brown")
+                                           ((draw-pixmap window3) "block.jpg" (make-posn 270 630))
+                                           ((draw-pixmap window3) "block.jpg" (make-posn 270 600))
+                                           ((draw-pixmap window3) "block.jpg" (make-posn 300 630))
+                                           ((draw-pixmap window3) "block.jpg" (make-posn 330 630))
+                                           ((draw-pixmap window3) "block.jpg" (make-posn 360 630))
+                                           ((draw-pixmap window3) "block.jpg" (make-posn 360 660))
+                                           ((draw-solid-rectangle window1) (make-posn 300 600) 30 30 "brown")
+                                           ((draw-solid-rectangle window1) (make-posn 330 600) 30 30 "brown")
+                                           ((draw-solid-rectangle window1) (make-posn 360 600) 30 30 "brown")
+                                           ((draw-solid-rectangle window1) (make-posn 360 630) 30 30 "brown")
+                                           (remove-powers (cdr l)))
+                                              (remove-powers (cdr l)))
+                                           (if(> (current-seconds) t)
+                                              (begin
+                                                ((draw-solid-rectangle window3) (make-posn x y) 30 30 "black")
+                                                (set-field! powers current-stats (remove power powers))
+                                                (remove-powers (cdr l)))
+                                              (remove-powers (cdr l))))
+                                        (if(equal? x 'taken)
+                                           (if(> (current-seconds) t)
+                                           (begin
+                                             (set-field! powers current-stats (remove power powers))
+                                             (remove-powers (cdr l)))
+                                           (remove-powers (cdr l)))
+                                           (if(> (current-seconds) t)
+                                              (begin
+                                                (set-field! powers current-stats (remove power powers))
+                                                ((draw-solid-rectangle window3) (make-posn x y) 30 30 "black")
+                                                (remove-powers (cdr l)))
+                                              (remove-powers (cdr l))))))
+                                    (set! remove-i 1)))
+         (set! remove-i 0)))))
+(define remove-i 1)
